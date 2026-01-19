@@ -88,7 +88,8 @@ mindpalace/
 
 ## License
 
-MIT — do whatever you want with it.
+Free for personal use. Commercial use prohibited without permission.
+See [LICENSE](LICENSE) for details.
 
 ---
 
