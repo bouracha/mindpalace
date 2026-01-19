@@ -1,8 +1,8 @@
 # MindPalace
 
-> Last updated: 2026-01-19
+> Last updated: —
 
-**Anthony Bourached's** knowledge operating system. Talk naturally — I organize as patterns emerge.
+Your knowledge operating system. Talk naturally — I organize as patterns emerge.
 
 ## How It Works
 
@@ -20,15 +20,10 @@ No setup required. Just start talking.
 ```
 MindPalace/
 ├── README.md       ← you are here
-├── .claude/        — the OS kernel
+├── .claude/        — the OS kernel (protected)
 ├── sessions/       — logs, summaries, chronicles
-├── me/             — your profile
-├── projects/       — research & creative work
-│   ├── oxia-palus/ — AI art collective
-│   └── hg-vae/     — human motion modeling
-└── people/         — collaborators & connections
-    ├── ryan-rhys-griffiths/ — close friend, co-author
-    └── david-stork/ — art + computation
+├── me/             — your profile (created on first run)
+└── [emergent...]   — people/, projects/, topics/ appear as needed
 ```
 
 ## Commands
