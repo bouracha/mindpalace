@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write(sessions/**)",
+      "Write(projects/**)",
+      "Write(people/**)",
+      "Write(topics/**)",
+      "Write(me/**)",
+      "Edit(sessions/**)",
+      "Edit(projects/**)",
+      "Edit(people/**)",
+      "Edit(topics/**)",
+      "Edit(me/**)",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "Bash"
+    ],
+    "deny": [
+      "Write(.claude/**)",
+      "Edit(.claude/**)",
+      "Bash(rm *)",
+      "Bash(sudo *)",
+      "Bash(chmod *)",
+      "Bash(chown *)"
+    ]
+  }
+}
