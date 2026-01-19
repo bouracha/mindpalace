@@ -243,20 +243,12 @@ Last processed: 4ed9573c-31d8-4e6f-ac10-c6e8284de5c8.jsonl @ 2025-01-19 20:30
 
 ## Permissions
 
-This command runs autonomously. Pre-grant in settings:
+This command runs autonomously. Settings allow Write/Edit broadly, deny only `.claude/**`:
 ```json
 {
   "permissions": {
-    "allow": [
-      "Read(**)",
-      "Write(sessions/**)",
-      "Write(projects/**)",
-      "Write(people/**)",
-      "Write(topics/**)",
-      "Edit(**)",
-      "Bash(mkdir *)",
-      "Bash(pdflatex *)"
-    ]
+    "allow": ["Read", "Write", "Edit", "Bash", ...],
+    "deny": ["Write(.claude/**)", "Edit(.claude/**)", ...]
   }
 }
 ```

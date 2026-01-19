@@ -2,16 +2,8 @@
   "permissions": {
     "allow": [
       "Read",
-      "Write(sessions/**)",
-      "Write(projects/**)",
-      "Write(people/**)",
-      "Write(topics/**)",
-      "Write(me/**)",
-      "Edit(sessions/**)",
-      "Edit(projects/**)",
-      "Edit(people/**)",
-      "Edit(topics/**)",
-      "Edit(me/**)",
+      "Write",
+      "Edit",
       "Glob",
       "Grep",
       "WebSearch",
