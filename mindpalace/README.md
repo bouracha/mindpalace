@@ -30,6 +30,37 @@ MindPalace/
 
 - `/update` — process recent sessions, generate summary + chronicle
 
+## Quick Navigation
+
+| Keyword | Location | Description |
+|---------|----------|-------------|
+| me, profile | [[me/]] | Your profile |
+| sessions, logs | [[sessions/]] | Session logs and summaries |
+
+<!-- As MindPalace grows, this table expands with keywords for quick lookup -->
+
+## Current Structure
+
+- [[me/]] — Your profile (created on first run)
+- [[sessions/]] — Logs, summaries, chronicles
+
+<!-- Emergent folders appear here as they're created -->
+<!-- - [[people/]] — Contacts and collaborations -->
+<!-- - [[projects/]] — Active work -->
+<!-- - [[topics/]] — Reference material -->
+
+## Keyword Index
+
+<!-- Semantic routing: add keywords as structure grows -->
+```
+me: me/
+profile: me/
+sessions: sessions/
+logs: sessions/
+```
+
+---
+
 ## Navigation
 
 Every folder has a README. Follow the READMEs.

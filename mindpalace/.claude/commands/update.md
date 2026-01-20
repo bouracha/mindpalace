@@ -158,13 +158,79 @@ Does folder exist? (e.g., people/john/)
 - Include timestamps and session references
 - Use `[[wiki-links]]` for cross-references
 
-### Cascading READMEs
+### Cascading READMEs (Bottom-Up)
+
+Updates flow from leaves to root — each README summarizes its children:
+
+```
+projects/chess/experiments/README.md   ← update first (leaf)
+        ↓
+projects/chess/README.md               ← summarizes experiments/
+        ↓
+projects/README.md                     ← summarizes chess/
+        ↓
+README.md (root)                       ← summarizes projects/, plus navigation map
+```
+
+**Process:**
 1. Collect all modified folders
-2. Sort by depth (deepest first)
-3. For each folder, update its README:
+2. Compute all ancestor folders up to root
+3. Sort by depth (deepest first)
+4. For each folder, update its README:
    - Update timestamp: `> Last updated: YYYY-MM-DD HH:MM`
-   - Update summary of contents
-4. Work up to root README
+   - Summarize what's in child folders/files
+   - Add `[[wiki-links]]` to children
+5. Continue up to root
+
+### Root README: The Entry Point (Richer Than Normal Parents)
+
+Normal parents summarize children abstractly. Root is different — it's the **entry point for all navigation**, so it should be the **richest** layer:
+
+- Keywords bubble up from deep in the tree, not just immediate children
+- More detail than a normal parent would have
+- Cross-cutting keywords that span multiple folders
+
+Think of root as the routing table / search index, not just another summary.
+
+**Root does standard cascade work, plus:**
+
+1. **Quick Navigation table** — Add keywords that help find content:
+   ```markdown
+   | chess, engine, benchmark | [[projects/chess/]] | Chess engine research |
+   ```
+
+2. **Current Structure** — Keep the folder tree current:
+   ```markdown
+   - [[projects/chess/]] — Chess engine research
+   ```
+
+3. **Keyword Index** — Add semantic routing entries:
+   ```
+   chess: projects/chess/
+   benchmark: projects/chess/
+   ```
+
+**Example: Keywords bubbling up**
+
+```
+projects/chess/experiments/alpha-beta.md  — contains "pruning optimization"
+
+Normal parent (projects/chess/README.md):
+  - [[experiments/]] — Algorithm experiments
+
+Root README (richer):
+  | chess, alpha-beta, pruning | [[projects/chess/]] | Chess engine research |
+
+  Keyword Index:
+  pruning: projects/chess/experiments/
+  alpha-beta: projects/chess/experiments/
+```
+
+The root captures "pruning" and "alpha-beta" even though they live 3 levels deep. A user searching for "pruning" hits the root keyword index immediately.
+
+**Use judgment**: Not every detail needs a root keyword. Focus on things users will actually search for — project names, key concepts, people, recurring themes.
+
+**Techniques are suggestions, not requirements**: If you discover better ways to make content findable (tags, aliases, cross-links, whatever), use them. The goal is navigation — the technique is yours to choose.
 
 ---
 

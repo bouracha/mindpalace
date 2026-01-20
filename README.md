@@ -86,6 +86,23 @@ mindpalace/
 3. **Context reconstruction**: Topic README → timestamp → session summary → full context
 4. **Bottom-up cascade**: Changes bubble up through the README tree
 
+## Protecting the Kernel (Optional but Recommended)
+
+The `.claude/` folder is the OS kernel — it defines how MindPalace behaves. For extra protection, make it read-only:
+
+```bash
+chmod -R a-w .claude/
+```
+
+This prevents accidental modifications at the filesystem level.
+
+To modify kernel files when needed:
+```bash
+chmod u+w .claude/CLAUDE.md
+# make changes manually
+chmod u-w .claude/CLAUDE.md
+```
+
 ## License
 
 Free for personal use. Commercial use prohibited without permission.
