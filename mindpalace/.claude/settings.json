@@ -11,8 +11,12 @@
       "Bash"
     ],
     "deny": [
-      "Write(.claude/**)",
-      "Edit(.claude/**)",
+      "Write(.claude/CLAUDE.md)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/templates/**)",
+      "Edit(.claude/CLAUDE.md)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/templates/**)",
       "Bash(rm *)",
       "Bash(sudo *)",
       "Bash(chmod *)",

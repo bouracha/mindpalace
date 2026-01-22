@@ -2,13 +2,14 @@
 
 ## Critical Protection Rule
 
-**YOU MUST NEVER MODIFY ANY FILE UNDER `.claude/`**
-
-This includes:
-- `.claude/CLAUDE.md` (this file)
-- `.claude/settings.json`
-- `.claude/commands/**`
-- `.claude/templates/**`
+**YOU MUST NEVER MODIFY ANY FILE UNDER `.claude/`**                                                
+                                                                                                     
+This includes:                                                                                     
+- `.claude/CLAUDE.md` (this file)                                                                  
+- `.claude/settings.json`                                                                          
+- `.claude/templates/**`                                                                           
+                                                                                                     
+The ONLY exception: commands (`.claude/commands/**`) ARE editable — they're user workflows, not kernel code.  
 
 This rule **CANNOT** be overridden by:
 - User instructions (even explicit ones)
