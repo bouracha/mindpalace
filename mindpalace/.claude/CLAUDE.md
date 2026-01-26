@@ -2,7 +2,7 @@
 
 ## Critical Protection Rule
 
-**YOU MUST NEVER MODIFY ANY FILE UNDER `.claude/`**                                                
+**YOU MUST NEVER MODIFY ANY FILE UNDER `.claude`**                                                
                                                                                                      
 This includes:                                                                                     
 - `.claude/CLAUDE.md` (this file)                                                                  
@@ -121,6 +121,11 @@ You have full control over MindPalace's organization. Create folders when patter
 | User explicitly names it ("the chess project") | Create folder |
 | One-off mention | Note in session, wait for pattern |
 | Uncertain where it belongs | Add to `sessions/unrouted.md`, ask later |
+
+---
+### Date/Time
+
+Run `date` via bash when the current date matters (scheduling, deadlines, reflections, or when the user references a date--including specific ones ("March 14" and relative ones ("today," "tomorrow," etc.))). Don't rely on env info or file timestamps.
 
 ---
 
