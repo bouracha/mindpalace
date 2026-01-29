@@ -12,7 +12,7 @@ Raw JSONL logs → Chunk → Extract → Merge → Route → Generate outputs
 
 Produces:
 - **Summaries** (`sessions/summaries/`) — for AI context
-- **Chronicles** (`sessions/chronicles/`) — for human enjoyment
+- **Chronicles** (`sessions/chronicles/`) — for human enjoyment + evaluation
 
 ---
 
@@ -23,9 +23,12 @@ Produces:
 Claude CLI stores transcripts at:
 ```
 ~/.claude/projects/{project-path}/*.jsonl
+~/.claude/projects/{project-path}/*/subagents/*.jsonl
 ```
 Where `{project-path}` = working directory with `/` → `-` and leading `-`.
 Example: `/home/user/MindPalace` → `-home-user-MindPalace`
+
+**Include subagent files.** Subagents are spawned during sessions for exploration, research, and parallel work. Their JSONL logs live in `{session-id}/subagents/agent-*.jsonl`. These may contain low-signal tool output, but they may also contain substantive research, discoveries, or decisions that the parent session didn't surface. **Process them all** — extract what's substantive, skip pure tool noise. Attribute subagent content to its parent session (the UUID directory name).
 
 ### Check Cursor
 
@@ -36,12 +39,21 @@ Last processed: 4ed9573c-31d8-4e6f-ac10-c6e8284de5c8.jsonl @ 2025-01-19 17:48
 
 Format: `{filename} @ {timestamp}`
 
+### Get Current Time
+
+```bash
+date '+%Y-%m-%d %H:%M'
+```
+
+Always use this for timestamps — never rely on env info.
+
 ### Find New Files
 
-List JSONL files with mtime **after** the cursor timestamp.
+List JSONL files (including subagents) with mtime **after** the cursor timestamp.
 ```bash
 find ~/.claude/projects/{project-path}/ -name "*.jsonl" -newermt "2025-01-19 17:48"
 ```
+This catches both top-level session files and subagent files in subdirectories.
 
 If no new sessions, report "Nothing to update" and stop.
 
@@ -72,18 +84,6 @@ For each session JSONL:
 
 4. **Process each chunk** through Pass 1 (Extract)
 
-### Example
-```
-File: 1200 lines
-compact_boundary at lines: 400, 850
-
-Chunk 1: lines 1-410 (overlap)
-Chunk 2: lines 400-860 (overlap)
-Chunk 3: lines 850-1200
-```
-
-> **Future optimization**: This chunking logic should be a deterministic script, not LLM inference.
-
 ---
 
 ## Step 3: Pass 1 — Extract (per chunk)
@@ -96,10 +96,11 @@ Things you might extract (depending on what's there):
 - Topics, themes, concepts
 - Insights, realizations, learnings
 - Actions, follow-ups, commitments
+- Dates and deadlines
 
 **Extract liberally** — don't filter yet. Capture everything that might matter.
 
-The output format is flexible. Example of what an extraction might look like:
+The output format is flexible. Example:
 
 ```yaml
 chunk: session-abc123-chunk-2
@@ -117,120 +118,110 @@ insight: "Chronicles for humans, summaries for AI"
 action: "Follow up with John by Jan 25"
 ```
 
-Another chunk might look completely different if the conversation was different. That's fine.
-
 ---
 
-## Step 4: Pass 2 — Merge + Re-evaluate
+## Step 4: Pass 2 — Merge + Re-evaluate (Map-Reduce)
 
-Combine extractions across all chunks:
+**Scales to any volume.** Never try to merge everything in one context window.
 
-1. **Dedupe**: John in chunk 1 = John in chunk 3
-2. **Aggregate context**: Merge all mentions of same entity
+### Cluster by entity
+Group all extractions by entity (person, project, topic):
+```
+All chunk extractions
+    ↓
+Group: "John" mentions from chunks 1, 3, 7
+Group: "chess project" mentions from chunks 2, 3, 5
+Group: "grant deadline" from chunk 4
+...
+```
+
+### Merge within each cluster
+For each cluster (one context window per cluster):
+1. **Dedupe**: Same info from overlapping chunks
+2. **Aggregate context**: Combine all mentions into coherent summary
 3. **Re-score importance**: Something minor in chunk 1 may be significant given chunk 4
-4. **Flag cross-cutting**: Items that span multiple projects/topics
+4. **Note co-occurrences**: "John appeared with chess project and grants"
 
-Output: Unified extraction list with aggregated context.
+### If clusters are too large
+Recurse — merge cluster summaries into higher-level summaries. Each step is bounded.
+
+### Output
+One clean merged extraction per entity, with:
+- Aggregated context
+- Importance signal (how often, how central)
+- Co-occurrence map (which entities appeared together)
 
 ---
 
 ## Step 5: Pass 3 — Route + Write + Cascade
 
-For each extracted entity:
+**Three sub-phases, each bounded per-file. No step holds everything in context.**
 
-### Routing Decision
+### Phase 3a: Route content (per entity, one at a time)
+
+For each merged entity:
+
 ```
 Does folder exist? (e.g., people/john/)
     │
-    ├── YES → Append to folder, update README
+    ├── YES → Read its README, append new info, save
     │
     └── NO → Is it significant?
             │
             ├── YES (multiple mentions, explicit naming, has actions)
-            │   → Create folder + README
+            │   → Create folder + README with content
             │
             └── NO / UNCERTAIN
                 → Add to sessions/unrouted.md
 ```
 
-### Writing
-- Append new information to relevant files
-- Include timestamps and session references
-- Use `[[wiki-links]]` for cross-references
+- Process ONE entity per context window
+- Include timestamps (via `date` bash) and session references
+- Track which files were modified: `modified_files[]`
 
-### Cascading READMEs (Bottom-Up)
+### Phase 3b: Cross-link sweep (after all routing done)
 
-Updates flow from leaves to root — each README summarizes its children:
+For each pair of entities that co-occurred in sessions:
+1. Check if `[[wiki-links]]` exist between their READMEs
+2. Add missing links where relevant
+3. Each link check reads TWO files — bounded and fast
+
+This is a separate pass because you need all entities routed before you can link between them.
+
+### Phase 3c: Cascade timestamps (bottom-up, lightweight)
 
 ```
-projects/chess/experiments/README.md   ← update first (leaf)
+people/john/README.md        ← modified in 3a
         ↓
-projects/chess/README.md               ← summarizes experiments/
+people/README.md             ← update timestamp + child summary
         ↓
-projects/README.md                     ← summarizes chess/
-        ↓
-README.md (root)                       ← summarizes projects/, plus navigation map
+README.md (root)             ← update navigation map + keyword index
 ```
 
 **Process:**
-1. Collect all modified folders
+1. Collect all `modified_files[]` from 3a + 3b
 2. Compute all ancestor folders up to root
 3. Sort by depth (deepest first)
-4. For each folder, update its README:
+4. For each folder (one at a time):
+   - Read its README + first lines of children
    - Update timestamp: `> Last updated: YYYY-MM-DD HH:MM`
-   - Summarize what's in child folders/files
+   - Update child summary lines
    - Add `[[wiki-links]]` to children
 5. Continue up to root
 
-### Root README: The Entry Point (Richer Than Normal Parents)
+Each cascade step is lightweight — one parent README + child headers.
 
-Normal parents summarize children abstractly. Root is different — it's the **entry point for all navigation**, so it should be the **richest** layer:
+### Root README: Richer Than Normal Parents
+
+Root is the **entry point for all navigation**, so it gets extra detail:
 
 - Keywords bubble up from deep in the tree, not just immediate children
-- More detail than a normal parent would have
 - Cross-cutting keywords that span multiple folders
 
-Think of root as the routing table / search index, not just another summary.
-
 **Root does standard cascade work, plus:**
-
-1. **Quick Navigation table** — Add keywords that help find content:
-   ```markdown
-   | chess, engine, benchmark | [[projects/chess/]] | Chess engine research |
-   ```
-
-2. **Current Structure** — Keep the folder tree current:
-   ```markdown
-   - [[projects/chess/]] — Chess engine research
-   ```
-
-3. **Keyword Index** — Add semantic routing entries:
-   ```
-   chess: projects/chess/
-   benchmark: projects/chess/
-   ```
-
-**Example: Keywords bubbling up**
-
-```
-projects/chess/experiments/alpha-beta.md  — contains "pruning optimization"
-
-Normal parent (projects/chess/README.md):
-  - [[experiments/]] — Algorithm experiments
-
-Root README (richer):
-  | chess, alpha-beta, pruning | [[projects/chess/]] | Chess engine research |
-
-  Keyword Index:
-  pruning: projects/chess/experiments/
-  alpha-beta: projects/chess/experiments/
-```
-
-The root captures "pruning" and "alpha-beta" even though they live 3 levels deep. A user searching for "pruning" hits the root keyword index immediately.
-
-**Use judgment**: Not every detail needs a root keyword. Focus on things users will actually search for — project names, key concepts, people, recurring themes.
-
-**Techniques are suggestions, not requirements**: If you discover better ways to make content findable (tags, aliases, cross-links, whatever), use them. The goal is navigation — the technique is yours to choose.
+1. **Quick Navigation table** — Add keywords that help find content
+2. **Current Structure** — Keep the folder tree current
+3. **Keyword Index** — Add semantic routing entries
 
 ---
 
@@ -249,7 +240,7 @@ Write to `sessions/summaries/YYYY-MM-DD.md`:
 
 ### 6b: Chronicle (The Newspaper PDF)
 
-**Always generate LaTeX → PDF**. No markdown chronicle (the summary already covers that).
+**Always generate LaTeX → PDF**. The summary already covers the structured data.
 
 Write to `sessions/chronicles/YYYY-MM-DD.tex`, then compile to PDF.
 
@@ -263,11 +254,67 @@ Write to `sessions/chronicles/YYYY-MM-DD.tex`, then compile to PDF.
 | PEOPLE IN THE NEWS | Profile updates, new contacts |
 | PROJECT UPDATES | What changed, decisions made |
 | NEW DISCOVERIES | New folders, topics, insights |
-| BY THE NUMBERS | Sessions processed, files updated, folders created |
+| BY THE NUMBERS | Metrics dashboard (see below) |
 | MINDPALACE WEATHER | Fun health check (e.g., "Sunny — 0 unrouted items!") |
 | QUESTIONS FOR THE READER | From unrouted.md, 5-10 max, auto-archive after 7 days |
 
-**Make it fun**: Headlines, wordplay, personality. This is a newspaper, not a log.
+**Write like a newspaper: sell AND inform.** The Chronicle is both salesman and informer.
+
+**Structure each topic as a real article:**
+- **Headline hooks you in** — grabby, fun, makes you want to read ("Partnership Takes Shape as Revenue Model Crystallizes")
+- **The article delivers the full story** — all the nuance, specifics, and context that make it valuable
+
+**Don't skimp on important detail.** Each article should include:
+- **Specific names, dates, figures** — concrete details, not vague summaries
+- **The narrative** — what happened, in what order, and why each step mattered
+- **Decisions and reasoning** — what was decided and the logic behind it
+- **Quotes** — direct quotes from sessions where they add colour or capture key moments
+- **Strategic context** — why this matters, what it connects to, what it means for the bigger picture
+- **Next steps** — what happens next, with dates if known
+
+**The headline → nuance pipeline**: A headline is a promise. The article delivers on that promise with the detail needed to fully inform the reader. Someone reading in 6 months should understand exactly what happened, not just that something happened.
+
+**Detail weighting.** Both effort and novelty matter. Use signals from the data to judge emphasis:
+- **Effort**: Session length, message count, multi-session topics, iterative refinement cycles — if someone spent 5 hours building something, the chronicle should make that visible
+- **Novelty**: New insights, unexpected connections, first-time events — these deserve prominence even if brief in the logs
+
+How to weight these against each other is an evolving design choice. For now: **err heavily on the side of too much detail and long chronicles.** We can always trim later but can't recover what we didn't capture. Every topic gets a proper article. Better a 10-page chronicle that captures everything than a 2-page one that misses nuance.
+
+**The Chronicle is also an evaluation tool** — it reveals capture quality, routing accuracy, and what the system is uncertain about. More detail = better evaluation.
+
+**Chronicle length target**: Aim for 4-5 pages for a typical daily update. Can go up to ~20 pages for dense multi-day periods. Don't fix rigidly — give each nuance the explanation it needs.
+
+### Metrics Dashboard ("By the Numbers")
+
+Collect these metrics during processing and include in the chronicle's "By the Numbers" section. Add any metric that's easy to gather — we can narrow later.
+
+**Input metrics** (gathered during Steps 1-2):
+```bash
+# Total JSONL lines processed
+wc -l <all processed files> | tail -1
+
+# Total bytes of raw logs
+du -sh <all processed files>
+
+# Number of sessions + subagent files
+ls <processed files> | wc -l
+```
+
+**Processing metrics** (tracked during Steps 3-5):
+- Chunks created (how many extraction passes)
+- Entities extracted (people, projects, topics)
+- Entities routed (to existing folders vs new folders)
+- Items added to unrouted.md
+- READMEs updated (count)
+- Wiki-links added/verified
+- New folders created
+
+**Output metrics**:
+- Summary file size
+- Chronicle page count
+- Questions for the reader (count)
+
+Present in the chronicle as a compact dashboard — numbers tell the story of how much work the system did.
 
 ### PDF Compilation
 
@@ -293,11 +340,6 @@ Update `sessions/README.md` with the newest processed file:
 Last processed: {filename} @ {YYYY-MM-DD HH:MM}
 ```
 
-Example:
-```markdown
-Last processed: 4ed9573c-31d8-4e6f-ac10-c6e8284de5c8.jsonl @ 2025-01-19 20:30
-```
-
 ---
 
 ## Triggering
@@ -309,12 +351,12 @@ Last processed: 4ed9573c-31d8-4e6f-ac10-c6e8284de5c8.jsonl @ 2025-01-19 20:30
 
 ## Permissions
 
-This command runs autonomously. Settings allow Write/Edit broadly, deny only `.claude/**`:
+This command runs autonomously. Settings allow Write/Edit broadly:
 ```json
 {
   "permissions": {
     "allow": ["Read", "Write", "Edit", "Bash", ...],
-    "deny": ["Write(.claude/**)", "Edit(.claude/**)", ...]
+    "deny": ["Write(.claude/CLAUDE.md)", "Write(.claude/settings.json)", ...]
   }
 }
 ```
@@ -326,4 +368,4 @@ This command runs autonomously. Settings allow Write/Edit broadly, deny only `.c
 - **No new sessions**: Report "Nothing to update", stop gracefully
 - **Chunk too large**: Sub-split further, warn in summary
 - **Routing uncertain**: Add to unrouted.md, continue
-- **LaTeX fails**: Keep markdown chronicle, skip PDF, warn user
+- **LaTeX fails**: Keep .tex file, skip PDF, warn user
