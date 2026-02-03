@@ -316,6 +316,38 @@ ls <processed files> | wc -l
 
 Present in the chronicle as a compact dashboard — numbers tell the story of how much work the system did.
 
+### LaTeX Layout Requirements
+
+**CRITICAL**: These rules prevent layout bugs like empty pages or content running off page.
+
+1. **Always load breakable library**:
+   ```latex
+   \usepackage{tcolorbox}
+   \tcbuselibrary{breakable,skins}  % MUST be after usepackage
+   ```
+
+2. **All tcolorbox styles MUST include `breakable`**:
+   ```latex
+   \tcbset{
+     featurebox/.style={
+       colback=mpblue!5,
+       ...
+       breakable  % Without this, boxes won't flow across pages
+     }
+   }
+   ```
+
+3. **When creating custom boxes in the .tex file**, always add `breakable` to the options:
+   ```latex
+   \begin{tcolorbox}[featurebox, breakable, title={Feature Title}]
+   ```
+
+4. **Avoid rigid \columnbreak** where content length varies — let LaTeX flow naturally.
+
+5. **No fixed heights** on boxes — they should expand with content.
+
+The template at `.claude/templates/chronicle.tex` includes these settings. When writing custom LaTeX sections, follow the same patterns.
+
 ### PDF Compilation
 
 ```bash
@@ -339,6 +371,50 @@ Update `sessions/README.md` with the newest processed file:
 ```markdown
 Last processed: {filename} @ {YYYY-MM-DD HH:MM}
 ```
+
+---
+
+## Step 8: PDF Reflection & Validation
+
+**MANDATORY BEFORE COMPLETING.** After PDF compilation, validate the output.
+
+### 8a: Read the PDF
+
+Use the Read tool to inspect the generated PDF:
+```
+Read sessions/chronicles/YYYY-MM-DD.pdf
+```
+
+This renders the PDF visually — check the actual layout, not just that compilation succeeded.
+
+### 8b: Layout Validation Checklist
+
+Verify each of these:
+
+| Check | Issue if Failed | Fix |
+|-------|-----------------|-----|
+| **No empty pages** | Page 1 has masthead + headlines then mostly blank | Content boxes not breaking — verify `breakable` in all styles |
+| **Content flows across pages** | Feature article runs off bottom of page | Box missing `breakable` option, or library not loaded |
+| **No orphaned headers** | Section header at bottom with content on next page | Add `\needspace{3\baselineskip}` before header |
+| **Readable column balance** | One column full, other mostly empty | Reduce `\columnbreak` usage, let LaTeX flow |
+| **All sections present** | Missing expected content (people, projects, etc.) | Check LaTeX generation logic |
+
+### 8c: If Issues Found
+
+1. **Identify the cause** — usually missing `breakable` or improper box nesting
+2. **Edit the .tex file** — fix the specific issue
+3. **Recompile**: `pdflatex -interaction=nonstopmode YYYY-MM-DD.tex`
+4. **Re-read the PDF** to verify fix
+5. **Repeat until layout is clean**
+
+### 8d: Report Layout Quality
+
+In your completion message, include:
+- Page count
+- Whether any layout issues were found and fixed
+- Overall layout quality assessment
+
+**The update is not complete until the PDF passes validation.**
 
 ---
 

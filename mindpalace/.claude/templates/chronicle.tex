@@ -17,6 +17,7 @@
 \usepackage{titlesec}
 \usepackage{enumitem}
 \usepackage{tcolorbox}
+\tcbuselibrary{breakable,skins}  % CRITICAL: Required for boxes to flow across pages
 
 % Colors
 \definecolor{mpblue}{RGB}{30,60,114}
@@ -38,7 +39,7 @@
   {\large\bfseries\color{mpblue}}
   {\thesubsection}{0em}{}
 
-% Box styles
+% Box styles — ALL styles MUST include 'breakable' so content flows across pages
 \tcbset{
   chroniclebox/.style={
     colback=mplightgray,
@@ -48,7 +49,8 @@
     left=8pt,
     right=8pt,
     top=6pt,
-    bottom=6pt
+    bottom=6pt,
+    breakable
   },
   questionbox/.style={
     colback=mpgold!20,
@@ -58,7 +60,19 @@
     left=8pt,
     right=8pt,
     top=6pt,
-    bottom=6pt
+    bottom=6pt,
+    breakable
+  },
+  featurebox/.style={
+    colback=mpblue!5,
+    colframe=mpblue,
+    boxrule=2pt,
+    arc=5pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    breakable
   }
 }
 
