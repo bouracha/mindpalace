@@ -16,6 +16,37 @@ Produces:
 
 ---
 
+## Step 0: Ask Update Scope
+
+Before processing, ask the user:
+
+> **What should I update from?**
+> 1. **Everything since last update** — Process all sessions since the cursor timestamp
+> 2. **Just today** — Only process sessions from today
+
+Use the AskUserQuestion tool with these options.
+
+Based on their choice:
+- **Everything since last update**: Use the cursor from `sessions/README.md` as normal
+- **Just today**: Override the cursor to today's date at 00:00 (ignoring the stored cursor)
+
+---
+
+## Scope Discipline (CRITICAL — read before Step 1)
+
+**The cursor is authoritative at the message level, not the file level.**
+
+Long-running session files keep being appended to across multiple /update runs. A file with an mtime after the cursor doesn't mean the *whole file* is new — only the lines with timestamps after the cursor are new. Treating the whole file as new is how scope-bleed happens (May 2026 incident: pre-cursor content from sessions started in late April got re-ingested into the May 7–13 chronicle because their files were still being written to).
+
+**Two-layer defense:**
+
+1. **Filter by per-message timestamp during extraction** (primary). Every JSONL line has a `timestamp` field — skip any line older than the cursor.
+2. **Cross-reference the previous summary** (secondary). Before writing the new summary, read the most recent `sessions/summaries/*.md` and check whether you're about to re-describe things that are already there. If yes, that's a scope-bleed signal — diagnose before continuing.
+
+Naming this failure mode explicitly so it doesn't happen quietly: **session files outlive cursors**. Always slice content by message timestamp, never by file boundary.
+
+---
+
 ## Step 1: Find New Sessions
 
 ### Locate Transcripts
@@ -34,28 +65,54 @@ Example: `/home/user/MindPalace` → `-home-user-MindPalace`
 
 Read cursor from `sessions/README.md`:
 ```markdown
-Last processed: 4ed9573c-31d8-4e6f-ac10-c6e8284de5c8.jsonl @ 2025-01-19 17:48
+Last processed: 2026-05-13T09:00:00Z
 ```
 
-Format: `{filename} @ {timestamp}`
+Format: a single ISO 8601 UTC timestamp. No filename — filename is ambiguous when many files were touched, and the cursor is about *content*, not files.
+
+If the existing cursor is in the old `{filename} @ {YYYY-MM-DD HH:MM}` format, convert it to UTC ISO 8601 on this run and store the new form going forward. Interpret the old local-time stamp as the user's local timezone (run `date '+%Z'` to confirm).
 
 ### Get Current Time
 
 ```bash
-date '+%Y-%m-%d %H:%M'
+date -u '+%Y-%m-%dT%H:%M:%SZ'
 ```
 
-Always use this for timestamps — never rely on env info.
+UTC ISO 8601. Always — JSONL message timestamps are UTC, and the cursor needs to compare apples to apples. Never use env info.
 
-### Find New Files
+### Find Candidate Files
 
-List JSONL files (including subagents) with mtime **after** the cursor timestamp.
+List JSONL files (including subagents) with mtime **after** the cursor — this is a *candidate list*, not the final scope.
+
 ```bash
-find ~/.claude/projects/{project-path}/ -name "*.jsonl" -newermt "2025-01-19 17:48"
+find ~/.claude/projects/{project-path}/ -name "*.jsonl" -newermt "$CURSOR_TS"
 ```
+
 This catches both top-level session files and subagent files in subdirectories.
 
-If no new sessions, report "Nothing to update" and stop.
+If no candidate files, report "Nothing to update" and stop.
+
+### Slice Candidate Files by Message Timestamp
+
+**For each candidate file, extract only the messages with `timestamp > cursor`.** Do not pass the whole file to the extract pass. Quick Python sketch:
+
+```python
+import json
+cutoff = "2026-05-13T09:00:00Z"  # cursor
+for line in open(path):
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    ts = obj.get('timestamp')
+    if ts and ts > cutoff:
+        # in-scope — feed to extract pass
+        ...
+```
+
+Lines without timestamps (rare — usually structural records like session start markers) can be kept or dropped at your discretion; default to keeping them only if surrounded by in-scope messages.
+
+**Sanity check before extraction**: count in-scope messages per file. If a file contributes 0 in-scope messages, drop it entirely from this run even if its mtime is newer than the cursor.
 
 ---
 
@@ -229,12 +286,15 @@ Root is the **entry point for all navigation**, so it gets extra detail:
 
 ### 6a: Structured Summary
 
-Write to `sessions/summaries/YYYY-MM-DD.md`:
+Write to `sessions/summaries/YYYY-MM-DD.md` (or `YYYY-MM-DD-to-YYYY-MM-DD.md` for multi-day windows):
 
 - Clear markdown, structure follows content
 - Capture what happened, decisions made, things learned
 - Include references to folders created/updated
 - Keep it parseable for AI context loading
+- **State the window explicitly** in a header line: "Strict window: post-cursor (YYYY-MM-DDTHH:MM:SSZ). Earlier session content is in `sessions/summaries/<prev>.md`."
+
+**Scope sanity check before writing.** Read the most recent prior summary in `sessions/summaries/`. For each major item you're about to include, ask: "Was this already covered there?" If yes, drop it from this summary. Reference the prior summary instead. This is the second layer of defense against scope-bleed; the first (message-timestamp filtering in Step 1) should catch most of it, but a final check before committing the summary file is cheap and high-value.
 
 **No rigid template** — let the summary reflect the session.
 
@@ -316,38 +376,6 @@ ls <processed files> | wc -l
 
 Present in the chronicle as a compact dashboard — numbers tell the story of how much work the system did.
 
-### LaTeX Layout Requirements
-
-**CRITICAL**: These rules prevent layout bugs like empty pages or content running off page.
-
-1. **Always load breakable library**:
-   ```latex
-   \usepackage{tcolorbox}
-   \tcbuselibrary{breakable,skins}  % MUST be after usepackage
-   ```
-
-2. **All tcolorbox styles MUST include `breakable`**:
-   ```latex
-   \tcbset{
-     featurebox/.style={
-       colback=mpblue!5,
-       ...
-       breakable  % Without this, boxes won't flow across pages
-     }
-   }
-   ```
-
-3. **When creating custom boxes in the .tex file**, always add `breakable` to the options:
-   ```latex
-   \begin{tcolorbox}[featurebox, breakable, title={Feature Title}]
-   ```
-
-4. **Avoid rigid \columnbreak** where content length varies — let LaTeX flow naturally.
-
-5. **No fixed heights** on boxes — they should expand with content.
-
-The template at `.claude/templates/chronicle.tex` includes these settings. When writing custom LaTeX sections, follow the same patterns.
-
 ### PDF Compilation
 
 ```bash
@@ -367,54 +395,13 @@ Clean up auxiliary files (`.aux`, `.log`) after successful compilation.
 
 ## Step 7: Update Cursor
 
-Update `sessions/README.md` with the newest processed file:
+Update `sessions/README.md` with a UTC ISO 8601 timestamp. Use the *current time* at update completion — not the newest in-scope message timestamp, because subsequent /update runs should pick up anything written while this one was processing.
+
 ```markdown
-Last processed: {filename} @ {YYYY-MM-DD HH:MM}
+Last processed: 2026-05-13T10:00:00Z
 ```
 
----
-
-## Step 8: PDF Reflection & Validation
-
-**MANDATORY BEFORE COMPLETING.** After PDF compilation, validate the output.
-
-### 8a: Read the PDF
-
-Use the Read tool to inspect the generated PDF:
-```
-Read sessions/chronicles/YYYY-MM-DD.pdf
-```
-
-This renders the PDF visually — check the actual layout, not just that compilation succeeded.
-
-### 8b: Layout Validation Checklist
-
-Verify each of these:
-
-| Check | Issue if Failed | Fix |
-|-------|-----------------|-----|
-| **No empty pages** | Page 1 has masthead + headlines then mostly blank | Content boxes not breaking — verify `breakable` in all styles |
-| **Content flows across pages** | Feature article runs off bottom of page | Box missing `breakable` option, or library not loaded |
-| **No orphaned headers** | Section header at bottom with content on next page | Add `\needspace{3\baselineskip}` before header |
-| **Readable column balance** | One column full, other mostly empty | Reduce `\columnbreak` usage, let LaTeX flow |
-| **All sections present** | Missing expected content (people, projects, etc.) | Check LaTeX generation logic |
-
-### 8c: If Issues Found
-
-1. **Identify the cause** — usually missing `breakable` or improper box nesting
-2. **Edit the .tex file** — fix the specific issue
-3. **Recompile**: `pdflatex -interaction=nonstopmode YYYY-MM-DD.tex`
-4. **Re-read the PDF** to verify fix
-5. **Repeat until layout is clean**
-
-### 8d: Report Layout Quality
-
-In your completion message, include:
-- Page count
-- Whether any layout issues were found and fixed
-- Overall layout quality assessment
-
-**The update is not complete until the PDF passes validation.**
+No filename. The cursor is about *content* (messages with timestamps), not about files (which keep getting appended to).
 
 ---
 
